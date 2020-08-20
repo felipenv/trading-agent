@@ -14,12 +14,18 @@ def main():
         raise ValueError("missing credentials in environment")
 
 
-    agent = Agent(credentials, base_url='https://api.ig.com/gateway/deal')
+    parameters = {'numPoints_rsi': 10,
+                  'numPoints_force':10,
+                  'M1': 12,
+                  'M2': 26,
+                  'M3': 9}
+
+    agent = Agent(credentials, parameters, base_url='https://api.ig.com/gateway/deal')
 
     agent.login()
 
     # agent.get_price(epic='CS.D.AUDUSD.CFD.IP', resolution='HOUR', numPoints=100, type='ask')
-    agent.calc_metrics(epic='CS.D.AUDUSD.CFD.IP', resolutions=['DAY','HOUR_4', 'HOUR', 'MINUTE_30', 'MINUTE_15'], numPoints=10, type='ask')
+    agent.calc_metrics(epic='CS.D.AUDUSD.CFD.IP', resolutions=['DAY','HOUR_4', 'HOUR', 'MINUTE_30', 'MINUTE_15'], type='ask')
 
 
 if __name__ == "__main__":

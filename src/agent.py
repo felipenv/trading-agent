@@ -2,7 +2,8 @@ class Agent():
     """Class to handle all operations performed by the agent using REST API"""
     import requests, json
     import pandas as pd
-    def __init__(self, credentials, base_url='https://api.ig.com/gateway/deal'):
+
+    def __init__(self, credentials, parameters, base_url='https://api.ig.com/gateway/deal'):
         self.credentials = credentials
         self.security_token = None
         self.CST = None
@@ -11,6 +12,8 @@ class Agent():
         self.prices = {}
         self.rsi = {}
         self.force = {}
+        self.osma = {}
+        self.parameters = parameters
 
     def build_header(self):
         self.header = {'X-IG-API-KEY': self.credentials['apikey'],
@@ -48,14 +51,16 @@ class Agent():
 
         self.prices[epic][resolution] = prices_df
 
-    def calc_metrics(self, epic, resolutions, numPoints, type):
+    def calc_metrics(self, epic, resolutions, type='ask'):
 
-        def initialize_dict(agent, epic, resolutions):
-            agent.rsi[epic] = dict.fromkeys(resolutions)
-            agent.force[epic] = dict.fromkeys(resolutions)
-            agent.prices[epic] = dict.fromkeys(resolutions)
+        def initialize_dict(agent):
+            agent.rsi[epic] = {k:[] for k in resolutions}
+            agent.force[epic] = {k:[] for k in resolutions}
+            agent.osma[epic] = {k:[] for k in resolutions}
+            agent.prices[epic] = {k:[] for k in resolutions}
 
         def rsi(agent, resolution):
+            agent.get_price(epic, resolution, agent.parameters['numPoints_rsi'], type)
             sum_up = 0
             sum_down = 0
             for index, row in agent.prices[epic][resolution].iterrows():
@@ -71,21 +76,85 @@ class Agent():
 
             RSI = 100 - (100/(1+RS))
 
-            agent.rsi[epic][resolution] = RSI
+            agent.rsi[epic][resolution].append(RSI)
 
         def force(agent, resolution):
+            agent.get_price(epic, resolution, agent.parameters['numPoints_force'], type)
             sum = 0
             for index, row in agent.prices[epic][resolution].iterrows():
                 sum += (row.closePrice - row.openPrice) * row.lastTradedVolume
-                F = sum/len(agent.prices[epic])
-                agent.force[epic][resolution] = F
+            F = sum/len(agent.prices[epic])
+            agent.force[epic][resolution].append(F)
 
-        initialize_dict(self, epic, resolutions)
+        def osma(agent, resolution):
+            agent.get_price(epic, resolution, 2*agent.parameters['M2']-1, type)
+            def EMA1():
+                def first_EMA(agent, alpha, t):
+                    ema = 0
+                    power = 0
+                    for i in range(t, -1, -1):
+                        ema += agent.prices[epic][resolution].iloc[i]['closePrice'] * (1-alpha) ** power
+                        power +=1
+
+                    return alpha*ema
+
+                alpha = 2/(1+agent.parameters['M1'])
+                EMA1_list = []
+                for t in range(len(agent.prices[epic][resolution]) - agent.parameters['M1'], len(agent.prices[epic][resolution])):
+                    if len(EMA1_list) == 0:
+                        ema = first_EMA(agent, alpha, t)
+                        EMA1_list.append(ema)
+
+                    else:
+                        ema = (alpha*(agent.prices[epic][resolution].iloc[t]['closePrice'])) + ((1-alpha) * EMA1_list[-1])
+                        EMA1_list.append(ema)
+
+                return EMA1_list[-1]
+
+            def EMA2():
+                def first_EMA(agent, alpha, t):
+                    ema = 0
+                    power = 0
+                    for i in range(t, -1, -1):
+                        ema += agent.prices[epic][resolution].iloc[i]['closePrice'] * (1-alpha) ** power
+                        power +=1
+
+                    return alpha*ema
+
+                alpha = 2/(1+agent.parameters['M2'])
+                EMA2_list = []
+                for t in range(len(agent.prices[epic][resolution]) - agent.parameters['M2'], len(agent.prices[epic][resolution])):
+                    if len(EMA2_list) == 0:
+                        ema = first_EMA(agent, alpha, t)
+                        EMA2_list.append(ema)
+
+                    else:
+                        ema = (alpha*(agent.prices[epic][resolution].iloc[t]['closePrice'])) + ((1-alpha) * EMA2_list[-1])
+                        EMA2_list.append(ema)
+
+                return EMA2_list[-1]
+
+            def signal_M3():
+                signal = 0
+                for i in range(len(agent.prices[epic][resolution]) - agent.parameters['M3'], len(agent.prices[epic][resolution])):
+                    signal += agent.prices[epic][resolution].iloc[i]['closePrice']
+
+                return signal/agent.parameters['M3']
+
+            ema1 = EMA1()
+            ema2 = EMA2()
+            signal_m3 = signal_M3()
+
+            osma = ema1 - ema2 - signal_m3
+
+            agent.osma[epic][resolution].append(osma)
+
+        if self.rsi == {} or self.force == {} or self.osma == {}:
+            initialize_dict(self)
 
         for resolution in resolutions:
             """call get price to calculate metrics"""
-            self.get_price(epic, resolution, numPoints, type)
-
             rsi(self, resolution)
             force(self, resolution)
+            osma(self, resolution)
 
