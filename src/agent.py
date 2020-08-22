@@ -20,7 +20,6 @@ class Agent():
                        "Content-Type": "application/json; charset=UTF-8",
                        "Accept": "application/json; charset=UTF-8",
                        "VERSION": "1"}
-        pass
 
     def login(self):
         if self.header is None:
@@ -51,6 +50,7 @@ class Agent():
 
         self.prices[epic][resolution] = prices_df
 
+    # TODO set maximum len for lists of metrics [self.rsi[epic][resolution], self.force[epic][resolution], self.osma[epic][resolution]] (maxBuffer parameter) to avoid lists grow to big and overflow memory.
     def calc_metrics(self, epic, resolutions, type='ask'):
 
         def initialize_dict(agent):
@@ -90,13 +90,15 @@ class Agent():
             agent.get_price(epic, resolution, 2*agent.parameters['M2']-1, type)
             def EMA1():
                 def first_EMA(agent, alpha, t):
-                    ema = 0
+                    numerator = 0
+                    denominator = 0
                     power = 0
                     for i in range(t, -1, -1):
-                        ema += agent.prices[epic][resolution].iloc[i]['closePrice'] * (1-alpha) ** power
+                        numerator += agent.prices[epic][resolution].iloc[i]['closePrice'] * (1-alpha) ** power
+                        denominator += (1-alpha) ** power
                         power +=1
 
-                    return alpha*ema
+                    return numerator/denominator
 
                 alpha = 2/(1+agent.parameters['M1'])
                 EMA1_list = []
@@ -113,13 +115,15 @@ class Agent():
 
             def EMA2():
                 def first_EMA(agent, alpha, t):
-                    ema = 0
+                    numerator = 0
+                    denominator = 0
                     power = 0
                     for i in range(t, -1, -1):
-                        ema += agent.prices[epic][resolution].iloc[i]['closePrice'] * (1-alpha) ** power
+                        numerator += agent.prices[epic][resolution].iloc[i]['closePrice'] * (1-alpha) ** power
+                        denominator += (1-alpha) ** power
                         power +=1
 
-                    return alpha*ema
+                    return numerator/denominator
 
                 alpha = 2/(1+agent.parameters['M2'])
                 EMA2_list = []
@@ -149,7 +153,9 @@ class Agent():
 
             agent.osma[epic][resolution].append(osma)
 
-        if self.rsi == {} or self.force == {} or self.osma == {}:
+        # calculate metrics for all resolutions
+
+        if self.rsi == {} or self.force == {} or self.osma == {} or epic not in self.prices:
             initialize_dict(self)
 
         for resolution in resolutions:
