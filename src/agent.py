@@ -47,6 +47,8 @@ class Agent():
         for price in prices:
             price_df = Agent.pd.DataFrame.from_dict(price)
             prices_df = prices_df.append(price_df.loc[type]).reset_index(drop=True)
+        
+        prices_df = prices_df.dropna()
 
         self.prices[epic][resolution] = prices_df
 
